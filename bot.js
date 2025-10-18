@@ -5,6 +5,9 @@ const { franc } = require('franc');
 const axios = require('axios');
 const fs = require('fs');
 
+const http = require('http');
+const PORT = process.env.PORT || 3000;
+
 // put this at the top with other imports
 const path = require('path');
 
@@ -477,3 +480,15 @@ bot.catch(err => console.error('bot error:', err));
 bot.launch({
     allowedUpdates: ['message', 'channel_post']
 }).then(() => console.log('polling started (privacy OFF; bot must be admin in Translations channel).'));
+
+// tiny HTTP server so Render's Web Service sees an open port
+const server = http.createServer((req, res) => {
+    if (req.url === '/health') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('ok');              // health endpoint
+        return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('koto is running');   // default response
+});
+server.listen(PORT, () => console.log(`http server listening on ${PORT}`));
