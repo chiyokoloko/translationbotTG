@@ -8,6 +8,9 @@ const fs = require('fs');
 const http = require('http');
 const PORT = process.env.PORT || 3000;
 
+const PUBLIC_URL = process.env.PUBLIC_URL;
+const WEBHOOK_PATH = process.env.WEBHOOK_PATH || '/koto-webhook';
+
 // put this at the top with other imports
 const path = require('path');
 
@@ -34,11 +37,18 @@ SEED.add(1173495374); // chiyoko's ID (from your message)
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-// clear webhook -> polling
+// set webhook (no polling)
 (async () => {
-    try { await bot.telegram.deleteWebhook({ drop_pending_updates: true }); } catch { }
     const me = await bot.telegram.getMe();
     console.log(`bot ready as @${me.username}`);
+
+    if (!PUBLIC_URL) {
+        console.error('Missing PUBLIC_URL env var for webhooks');
+        process.exit(1);
+    }
+    const hookUrl = `${PUBLIC_URL}${WEBHOOK_PATH}`;
+    await bot.telegram.setWebhook(hookUrl);
+    console.log(`✅ Webhook set: ${hookUrl}`);
 })();
 
 /* -------------------- simple persistence -------------------- */
@@ -477,18 +487,19 @@ bot.command('tn', async (ctx) => {
 
 /* -------------------- errors & launch -------------------- */
 bot.catch(err => console.error('bot error:', err));
-bot.launch({
-    allowedUpdates: ['message', 'channel_post']
-}).then(() => console.log('polling started (privacy OFF; bot must be admin in Translations channel).'));
 
-// tiny HTTP server so Render's Web Service sees an open port
+// tiny HTTP server so Render sees an open port + webhook entry
 const server = http.createServer((req, res) => {
     if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end('ok');              // health endpoint
-        return;
+        return res.end('ok');
     }
+
+    if (req.url === WEBHOOK_PATH && req.method === 'POST') {
+        return bot.webhookCallback(WEBHOOK_PATH)(req, res);
+    }
+
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('koto is running');   // default response
+    res.end('koto is running');
 });
 server.listen(PORT, () => console.log(`http server listening on ${PORT}`));
